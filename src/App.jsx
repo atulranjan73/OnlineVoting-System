@@ -3,10 +3,9 @@ import devImage from "../src/dev.png"; // Ensure correct path
 import hanniImage from "../src/hanni.png";
 import noneImage from "../src/none.png";
 import axios from "axios";
-import './App.css';
+import "./App.css";
 
 const API_BASE_URL = "https://voting-kekx.onrender.com/api";
-
 
 const candidates = [
   { id: "देवेश कांत सिंह(BJP)", name: "देवेश कांत सिंह (BJP)", image: devImage },
@@ -20,22 +19,43 @@ function App() {
     villageName: "",
     mobileNumber: "",
   });
-
   const [message, setMessage] = useState(null);
   const [voteCount, setVoteCount] = useState([]);
+  const [hasVoted, setHasVoted] = useState(false); // New state to track voting status
+
+  // Check localStorage on component mount
+  useEffect(() => {
+    const voted = localStorage.getItem("hasVoted");
+    if (voted) {
+      setHasVoted(true);
+      setMessage("आप पहले ही मतदान कर चुके हैं। इस ब्राउज़र से दोबारा वोट नहीं कर सकते।");
+    }
+    fetchVoteCount(); // Fetch vote count on mount
+  }, []);
 
   const handleCandidateSelect = (id) => {
-    setFormData((prev) => ({ ...prev, candidate: id }));
+    if (!hasVoted) {
+      setFormData((prev) => ({ ...prev, candidate: id }));
+    }
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (!hasVoted) {
+      const { name, value } = e.target;
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Check if user has already voted in this browser
+    if (hasVoted) {
+      setMessage("आप पहले ही मतदान कर चुके हैं। इस ब्राउज़र से दोबारा वोट नहीं कर सकते।");
+      return;
+    }
+
+    // Validate form fields
     if (!formData.candidate || !formData.villageName || !formData.mobileNumber) {
       setMessage("सभी फ़ील्ड भरना अनिवार्य है!");
       return;
@@ -45,7 +65,12 @@ function App() {
       const response = await axios.post(`${API_BASE_URL}/vote`, formData);
       setMessage(response.data.message);
       setFormData({ candidate: "", villageName: "", mobileNumber: "" });
-      fetchVoteCount();
+
+      // Mark as voted in localStorage and state
+      localStorage.setItem("hasVoted", "true");
+      setHasVoted(true);
+
+      fetchVoteCount(); // Refresh vote count after successful vote
     } catch (error) {
       setMessage(error.response?.data?.message || "मतदान में समस्या आई!");
     }
@@ -59,10 +84,6 @@ function App() {
       console.error("Error fetching vote count", error);
     }
   };
-
-  useEffect(() => {
-    fetchVoteCount();
-  }, []);
 
   return (
     <div className="container">
@@ -83,6 +104,7 @@ function App() {
           onChange={handleInputChange}
           placeholder="अपने गाँव का नाम दर्ज करें"
           required
+          disabled={hasVoted} // Disable input if voted
         />
 
         <label>मोबाइल नंबर:</label>
@@ -93,6 +115,7 @@ function App() {
           onChange={handleInputChange}
           placeholder="10 अंकों का मोबाइल नंबर"
           required
+          disabled={hasVoted} // Disable input if voted
         />
 
         <h3>उम्मीदवार चुनें:</h3>
@@ -100,7 +123,9 @@ function App() {
           {candidates.map((cand) => (
             <div
               key={cand.id}
-              className={`candidate ${formData.candidate === cand.id ? "selected" : ""}`}
+              className={`candidate ${formData.candidate === cand.id ? "selected" : ""} ${
+                hasVoted ? "disabled" : ""
+              }`}
               onClick={() => handleCandidateSelect(cand.id)}
             >
               <img src={cand.image} alt={cand.name} />
@@ -109,14 +134,18 @@ function App() {
           ))}
         </div>
 
-        <button type="submit">🗳 वोट दें</button>
+        <button type="submit" disabled={hasVoted}>
+          🗳 वोट दें
+        </button>
       </form>
 
       <h2>📌 वोट गणना</h2>
       <ul>
         {voteCount.length > 0 ? (
           voteCount.map((vote) => (
-            <li key={vote._id}>{vote._id}: {vote.count} वोट</li>
+            <li key={vote._id}>
+              {vote._id}: {vote.count} वोट
+            </li>
           ))
         ) : (
           <li>अभी तक कोई वोट दर्ज नहीं हुआ।</li>
